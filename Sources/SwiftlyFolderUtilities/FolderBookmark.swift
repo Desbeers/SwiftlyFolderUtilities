@@ -13,15 +13,44 @@ public enum FolderBookmark {
 }
 
 extension FolderBookmark {
+    enum BookmarkError: LocalizedError {
+        case notFound
+        case noKeyWindow
+        case noFolderSelected
+
+        public var description: String {
+            switch self {
+            case .noKeyWindow:
+                return "Error retrieving key window"
+            case .notFound:
+                return "Error retrieving persistent bookmark data"
+            case .noFolderSelected:
+                return "There is no folder selected"
+            }
+        }
+
+        public var errorDescription: String? {
+            return description
+        }
+    }
+}
+
+
+extension FolderBookmark {
 
     /// Open a sheet to select a folder
     /// - Parameters:
     ///   - prompt: The text for the default button
     ///   - message: The message in the dialog
     ///   - bookmark: The name of the bookmark
-    ///   - action: The action after the folder is selected
-    public static func select(prompt: String, message: String, bookmark: String, action: @escaping () -> Void) {
-        let selection = getPersistentFileURL(bookmark) ?? getDocumentsDirectory()
+    /// - Returns: The selected URL or an error when nothing is selected
+    @MainActor public static func select(prompt: String, message: String, bookmark: String) async throws -> URL {
+        /// Make sure we have a window to attach the sheet
+        guard let window = NSApp.keyWindow else {
+            throw BookmarkError.noKeyWindow
+        }
+        /// Get the last selected folder; defaults to 'Documents'
+        let selection = getLastSelectedURL(bookmark: bookmark)
         let dialog = NSOpenPanel()
         dialog.showsResizeIndicator = true
         dialog.showsHiddenFiles = false
@@ -31,15 +60,15 @@ extension FolderBookmark {
         dialog.message = message
         dialog.prompt = prompt
         dialog.canCreateDirectories = true
-        dialog.beginSheetModal(for: NSApp.keyWindow!) { result in
-            guard  result == .OK, let url = dialog.url else {
-                return
-            }
-            /// Create a persistent bookmark for the folder the user just selected
-            _ = setPersistentFileURL(bookmark, url)
-            /// Do the closure action
-            action()
+        let result = await dialog.beginSheetModal(for: window)
+        /// Throw an error if no folder is selected
+        guard  result == .OK, let url = dialog.url else {
+            throw BookmarkError.noFolderSelected
         }
+        /// Create a persistent bookmark for the folder the user just selected
+        _ = setPersistentFileURL(bookmark, url)
+        /// Return the selected url
+        return url
     }
 }
 
@@ -49,9 +78,9 @@ extension FolderBookmark {
     /// - Parameters:
     ///   - bookmark: The name of the bookmark
     ///   - action: The action for the bookmark folder
-    public static func action(bookmark: String, action: (_ url: URL) async -> Void) async {
-        guard let persistentURL = FolderBookmark.getPersistentFileURL(bookmark) else {
-            return
+    public static func action(bookmark: String, action: (_ url: URL) async -> Void) async throws {
+        guard let persistentURL = try FolderBookmark.getPersistentFileURL(bookmark) else {
+            throw BookmarkError.notFound
         }
         /// Make sure the security-scoped resource is released when finished
         defer {
@@ -59,6 +88,7 @@ extension FolderBookmark {
         }
         /// Start accessing a security-scoped resource
         _ = persistentURL.startAccessingSecurityScopedResource()
+        /// Execute the action
         await action(persistentURL)
     }
 }
@@ -79,9 +109,9 @@ extension FolderBookmark {
 
     /// Get the URL of a bookmark
     /// - Parameter bookmark: The name of the bookmark
-    /// - Returns: The URL of the bookmark
-    public static func getURL(bookmark: String) -> URL {
-        guard let persistentURL = FolderBookmark.getPersistentFileURL(bookmark) else {
+    /// - Returns: The URL of the bookmark if found, else 'Documents'
+    public static func getLastSelectedURL(bookmark: String) -> URL {
+        guard let persistentURL = try? FolderBookmark.getPersistentFileURL(bookmark) else {
             return FolderBookmark.getDocumentsDirectory()
         }
         return persistentURL
@@ -101,7 +131,7 @@ private extension FolderBookmark {
             UserDefaults.standard.set(bookmarkData, forKey: bookmark)
             return true
         } catch let error {
-            print("Could not create a bookmark because: ", error)
+            print(error.localizedDescription)
             return false
         }
     }
@@ -112,10 +142,9 @@ private extension FolderBookmark {
     /// Get the sandbox bookmark
     /// - Parameter bookmark: The name of the bookmark
     /// - Returns: The URL of the bookmark
-    static func getPersistentFileURL(_ bookmark: String) -> URL? {
+    static func getPersistentFileURL(_ bookmark: String) throws -> URL? {
         guard let bookmarkData = UserDefaults.standard.data(forKey: bookmark) else {
-            print("Error retrieving persistent bookmark data.")
-            return nil
+            throw BookmarkError.notFound
         }
         do {
             var bookmarkDataIsStale = false
@@ -126,13 +155,11 @@ private extension FolderBookmark {
                 bookmarkDataIsStale: &bookmarkDataIsStale
             )
             if bookmarkDataIsStale {
-                print("The bookmark is outdated and needs to be regenerated.")
                 _ = setPersistentFileURL(bookmark, urlForBookmark)
             }
             return urlForBookmark
         } catch {
-            print("Error resolving bookmark:", error)
-            return nil
+            throw error
         }
     }
 }
