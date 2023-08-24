@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// Persistent folder utilities
+/// Persistent folder bookmark utilities
 public enum FolderBookmark {
     // Just a placeholder
 }
@@ -35,6 +35,7 @@ extension FolderBookmark {
     }
 }
 
+#if os(macOS)
 
 extension FolderBookmark {
 
@@ -72,6 +73,55 @@ extension FolderBookmark {
     }
 }
 
+#endif
+
+extension FolderBookmark {
+
+    public struct SelectFolder: View {
+
+    let bookmark: String
+        let action: () -> Void
+
+        let title: String
+        let systemImage: String
+
+        @State private var showSelector: Bool = false
+
+        public init(bookmark: String, title: String, systemImage: String, action: @escaping () -> Void) {
+            self.bookmark = bookmark
+            self.title = title
+            self.systemImage = systemImage
+            self.action = action
+        }
+
+
+        public var body: some View {
+            Button(
+                action: {
+                    showSelector.toggle()
+                },
+                label: {
+                    Label(title, systemImage: systemImage)
+                }
+            )
+            .fileImporter(
+                isPresented: $showSelector,
+                allowedContentTypes: [.folder]
+                ) { result in
+                    switch result {
+                    case .success(let folder):
+                        print(folder.absoluteString)
+                        let result = setPersistentFileURL(bookmark, folder)
+                        print(result)
+                        action()
+                    case .failure(let error):
+                        print(error.localizedDescription)
+                    }
+                }
+        }
+    }
+}
+
 extension FolderBookmark {
 
     /// Perform an action with a bookmark folder
@@ -90,18 +140,6 @@ extension FolderBookmark {
         _ = persistentURL.startAccessingSecurityScopedResource()
         /// Execute the action
         await action(persistentURL)
-    }
-}
-
-extension FolderBookmark {
-
-    /// Open an URL in the Finder
-    /// - Parameter url: The URL to open
-    public static func openInFinder(url: URL?) {
-        guard let url = url else {
-            return
-        }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 }
 
@@ -127,7 +165,11 @@ private extension FolderBookmark {
     /// - Returns: True or false if the bookmark is set
     static func setPersistentFileURL(_ bookmark: String, _ selectedURL: URL) -> Bool {
         do {
+#if os(macOS)
             let bookmarkData = try selectedURL.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+#else
+            let bookmarkData = try selectedURL.bookmarkData(options: .suitableForBookmarkFile, includingResourceValuesForKeys: nil, relativeTo: nil)
+#endif
             UserDefaults.standard.set(bookmarkData, forKey: bookmark)
             return true
         } catch let error {
@@ -137,23 +179,31 @@ private extension FolderBookmark {
     }
 }
 
-private extension FolderBookmark {
+extension FolderBookmark {
 
     /// Get the sandbox bookmark
     /// - Parameter bookmark: The name of the bookmark
     /// - Returns: The URL of the bookmark
-    static func getPersistentFileURL(_ bookmark: String) throws -> URL? {
+    public static func getPersistentFileURL(_ bookmark: String) throws -> URL? {
         guard let bookmarkData = UserDefaults.standard.data(forKey: bookmark) else {
             throw BookmarkError.notFound
         }
         do {
             var bookmarkDataIsStale = false
+#if os(macOS)
             let urlForBookmark = try URL(
                 resolvingBookmarkData: bookmarkData,
                 options: .withSecurityScope,
                 relativeTo: nil,
                 bookmarkDataIsStale: &bookmarkDataIsStale
             )
+#else
+            let urlForBookmark = try URL(
+                resolvingBookmarkData: bookmarkData,
+                relativeTo: nil,
+                bookmarkDataIsStale: &bookmarkDataIsStale
+            )
+#endif
             if bookmarkDataIsStale {
                 _ = setPersistentFileURL(bookmark, urlForBookmark)
             }
