@@ -111,8 +111,7 @@ extension FolderBookmark {
                     switch result {
                     case .success(let folder):
                         print(folder.absoluteString)
-                        let result = setPersistentFileURL(bookmark, folder)
-                        print(result)
+                        _ = setPersistentFileURL(bookmark, folder)
                         action()
                     case .failure(let error):
                         print(error.localizedDescription)
@@ -145,12 +144,22 @@ extension FolderBookmark {
 
 extension FolderBookmark {
 
-    /// Get the URL of a bookmark
+    /// Get the last selected URL of a bookmark, if any
     /// - Parameter bookmark: The name of the bookmark
     /// - Returns: The URL of the bookmark if found, else 'Documents'
     public static func getLastSelectedURL(bookmark: String) -> URL {
         guard let persistentURL = try? FolderBookmark.getPersistentFileURL(bookmark) else {
             return FolderBookmark.getDocumentsDirectory()
+        }
+        return persistentURL
+    }
+    
+    /// Get an optional bookmark URL
+    /// - Parameter bookmark: The name of the bookmark
+    /// - Returns: An optional URL
+    public static func getBookmarkL(bookmark: String) -> URL? {
+        guard let persistentURL = try? FolderBookmark.getPersistentFileURL(bookmark) else {
+            return nil
         }
         return persistentURL
     }
@@ -165,15 +174,26 @@ private extension FolderBookmark {
     /// - Returns: True or false if the bookmark is set
     static func setPersistentFileURL(_ bookmark: String, _ selectedURL: URL) -> Bool {
         do {
+            _ = selectedURL.startAccessingSecurityScopedResource()
 #if os(macOS)
-            let bookmarkData = try selectedURL.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+            let bookmarkData = try selectedURL.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
 #else
-            let bookmarkData = try selectedURL.bookmarkData(options: .suitableForBookmarkFile, includingResourceValuesForKeys: nil, relativeTo: nil)
+            let bookmarkData = try selectedURL.bookmarkData(
+                options: .suitableForBookmarkFile,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
 #endif
             UserDefaults.standard.set(bookmarkData, forKey: bookmark)
+            selectedURL.stopAccessingSecurityScopedResource()
             return true
         } catch let error {
             print(error.localizedDescription)
+            selectedURL.stopAccessingSecurityScopedResource()
             return false
         }
     }
