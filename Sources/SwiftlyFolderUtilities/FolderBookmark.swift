@@ -79,7 +79,7 @@ extension FolderBookmark {
 
     public struct SelectFolder: View {
 
-    let bookmark: String
+        let bookmark: String
         let action: () -> Void
 
         let title: String
@@ -94,7 +94,6 @@ extension FolderBookmark {
             self.action = action
         }
 
-
         public var body: some View {
             Button(
                 action: {
@@ -104,20 +103,46 @@ extension FolderBookmark {
                     Label(title, systemImage: systemImage)
                 }
             )
-            .fileImporter(
-                isPresented: $showSelector,
-                allowedContentTypes: [.folder]
-                ) { result in
-                    switch result {
-                    case .success(let folder):
-                        print(folder.absoluteString)
-                        _ = setPersistentFileURL(bookmark, folder)
-                        action()
-                    case .failure(let error):
-                        print(error.localizedDescription)
-                    }
-                }
+            .selectFolderSheet(bookmark: bookmark, showSelector: $showSelector, action: action)
         }
+    }
+}
+
+extension FolderBookmark {
+
+    struct SelectFolderSheet: ViewModifier {
+
+        @Binding var showSelector: Bool
+        let bookmark: String
+        let action: () -> Void
+
+        func body(content: Content) -> some View {
+            content
+                .fileImporter(
+                    isPresented: $showSelector,
+                    allowedContentTypes: [.folder]
+                    ) { result in
+                        switch result {
+                        case .success(let folder):
+                            _ = setPersistentFileURL(bookmark, folder)
+                            action()
+                        case .failure(let error):
+                            print(error.localizedDescription)
+                        }
+                    }
+        }
+    }
+}
+
+extension View {
+    public func selectFolderSheet(
+        bookmark: String,
+        showSelector: Binding<Bool>,
+        action: @escaping () -> Void
+    ) -> some View {
+        modifier(
+            FolderBookmark.SelectFolderSheet(showSelector: showSelector, bookmark: bookmark, action: action)
+        )
     }
 }
 
@@ -157,7 +182,7 @@ extension FolderBookmark {
     /// Get an optional bookmark URL
     /// - Parameter bookmark: The name of the bookmark
     /// - Returns: An optional URL
-    public static func getBookmarkL(bookmark: String) -> URL? {
+    public static func getBookmarkLink(bookmark: String) -> URL? {
         guard let persistentURL = try? FolderBookmark.getPersistentFileURL(bookmark) else {
             return nil
         }
