@@ -1,8 +1,8 @@
 //
 //  FolderUtil.swift
-//  
+//  SwiftlyFolderUtilities
 //
-//  Created by Nick Berendsen on 26/07/2023.
+//  © 2023 Nick Berendsen
 //
 
 #if os(macOS)
@@ -37,7 +37,7 @@ public extension URL {
 
 #if os(macOS)
 
-extension FolderBookmark {
+extension FolderUtil {
 
     /// Open an URL in the Finder
     /// - Parameter url: The URL to open

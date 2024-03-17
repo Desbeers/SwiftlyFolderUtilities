@@ -1,6 +1,6 @@
 //
 //  FolderBookmark.swift
-//  Chord Provider
+//  SwiftlyFolderUtilities
 //
 //  © 2023 Nick Berendsen
 //
@@ -12,7 +12,11 @@ public enum FolderBookmark {
     // Just a placeholder
 }
 
+// MARK: Errors
+
 extension FolderBookmark {
+
+    /// Errors that cann occure
     enum BookmarkError: LocalizedError {
         case notFound
         case noKeyWindow
@@ -35,113 +39,120 @@ extension FolderBookmark {
     }
 }
 
-#if os(macOS)
+// MARK: Public structs
 
 extension FolderBookmark {
-
-    /// Open a sheet to select a folder
-    /// - Parameters:
-    ///   - prompt: The text for the default button
-    ///   - message: The message in the dialog
-    ///   - bookmark: The name of the bookmark
-    /// - Returns: The selected URL or an error when nothing is selected
-    @MainActor public static func select(prompt: String, message: String, bookmark: String) async throws -> URL {
-        /// Make sure we have a window to attach the sheet
-        guard let window = NSApp.keyWindow else {
-            throw BookmarkError.noKeyWindow
-        }
-        /// Get the last selected folder; defaults to 'Documents'
-        let selection = getLastSelectedURL(bookmark: bookmark)
-        let dialog = NSOpenPanel()
-        dialog.showsResizeIndicator = true
-        dialog.showsHiddenFiles = false
-        dialog.canChooseFiles = false
-        dialog.canChooseDirectories = true
-        dialog.directoryURL = selection
-        dialog.message = message
-        dialog.prompt = prompt
-        dialog.canCreateDirectories = true
-        let result = await dialog.beginSheetModal(for: window)
-        /// Throw an error if no folder is selected
-        guard  result == .OK, let url = dialog.url else {
-            throw BookmarkError.noFolderSelected
-        }
-        /// Create a persistent bookmark for the folder the user just selected
-        _ = setPersistentFileURL(bookmark, url)
-        /// Return the selected url
-        return url
-    }
-}
-
-#endif
-
-extension FolderBookmark {
-
-    public struct SelectFolder: View {
+    
+    /// SwiftUI `View` with a button to open a `FileImporter` sheet
+    public struct SelectFolderButton: View {
 
         let bookmark: String
+        let message: String
+        let confirmationLabel: String
+        let buttonLabel: String
+        let buttonSystemImage: String
         let action: () -> Void
 
-        let title: String
-        let systemImage: String
+        @State private var isPresented: Bool = false
 
-        @State private var showSelector: Bool = false
-
-        public init(bookmark: String, title: String, systemImage: String, action: @escaping () -> Void) {
+        public init(
+            bookmark: String,
+            message: String,
+            confirmationLabel: String,
+            buttonLabel: String,
+            buttonSystemImage: String,
+            action: @escaping () -> Void
+        ) {
             self.bookmark = bookmark
-            self.title = title
-            self.systemImage = systemImage
+            self.message = message
+            self.confirmationLabel = confirmationLabel
+            self.buttonLabel = buttonLabel
+            self.buttonSystemImage = buttonSystemImage
             self.action = action
         }
 
         public var body: some View {
             Button(
                 action: {
-                    showSelector.toggle()
+                    isPresented.toggle()
                 },
                 label: {
-                    Label(title, systemImage: systemImage)
+                    Label(buttonLabel, systemImage: buttonSystemImage)
                 }
             )
-            .selectFolderSheet(bookmark: bookmark, showSelector: $showSelector, action: action)
+            .help(message)
+            .selectFolderSheet(
+                isPresented: $isPresented, 
+                bookmark: bookmark,
+                message: message,
+                confirmationLabel: confirmationLabel,
+                action: action
+            )
         }
     }
 }
 
-extension FolderBookmark {
+// MARK: Private structs
 
+extension FolderBookmark {
+    
+    /// Swiftui `Modifier` to add a `FileImporter` sheet
     struct SelectFolderSheet: ViewModifier {
 
-        @Binding var showSelector: Bool
+        @Binding var isPresented: Bool
         let bookmark: String
+        let message: String
+        let confirmationLabel: String
         let action: () -> Void
 
         func body(content: Content) -> some View {
             content
                 .fileImporter(
-                    isPresented: $showSelector,
+                    isPresented: $isPresented,
                     allowedContentTypes: [.folder]
-                    ) { result in
-                        switch result {
-                        case .success(let folder):
-                            _ = setPersistentFileURL(bookmark, folder)
-                            action()
-                        case .failure(let error):
-                            print(error.localizedDescription)
-                        }
+                ) { result in
+                    switch result {
+                    case .success(let folder):
+                        _ = setPersistentFileURL(bookmark, folder)
+                        action()
+                    case .failure(let error):
+                        print(error.localizedDescription)
                     }
+                }
+                .fileDialogMessage(message)
+                .fileDialogConfirmationLabel(confirmationLabel)
+                .fileDialogCustomizationID(bookmark)
         }
     }
 }
 
+// MARK: Public functions
+
 extension View {
+
+    /// Swiftui `Modifier` to add a `FileImporter` sheet
+    /// - Parameters:
+    ///   - isPresented: Bool to show the sheet or not
+    ///   - bookmark: The name of the bookmark
+    ///   - message: The message in the `FileImporter` sheet
+    ///   - confirmationLabel: The label of the confirmation button
+    ///   - action: The action to perform when a folder is selected
+    /// - Returns: A `ViewModifier` with the `FileImporter` sheet
     public func selectFolderSheet(
+        isPresented: Binding<Bool>,
         bookmark: String,
-        showSelector: Binding<Bool>,
+        message: String,
+        confirmationLabel: String,
         action: @escaping () -> Void
     ) -> some View {
         modifier(
-            FolderBookmark.SelectFolderSheet(showSelector: showSelector, bookmark: bookmark, action: action)
+            FolderBookmark.SelectFolderSheet(
+                isPresented: isPresented,
+                bookmark: bookmark,
+                message: message,
+                confirmationLabel: confirmationLabel,
+                action: action
+            )
         )
     }
 }
@@ -165,9 +176,6 @@ extension FolderBookmark {
         /// Execute the action
         await action(persistentURL)
     }
-}
-
-extension FolderBookmark {
 
     /// Get the last selected URL of a bookmark, if any
     /// - Parameter bookmark: The name of the bookmark
@@ -188,43 +196,6 @@ extension FolderBookmark {
         }
         return persistentURL
     }
-}
-
-private extension FolderBookmark {
-
-    /// Set the sandbox bookmark
-    /// - Parameters:
-    ///   - bookmark: The name of the bookmark
-    ///   - selectedURL: The URL of the bookmark
-    /// - Returns: True or false if the bookmark is set
-    static func setPersistentFileURL(_ bookmark: String, _ selectedURL: URL) -> Bool {
-        do {
-            _ = selectedURL.startAccessingSecurityScopedResource()
-#if os(macOS)
-            let bookmarkData = try selectedURL.bookmarkData(
-                options: .withSecurityScope,
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            )
-#else
-            let bookmarkData = try selectedURL.bookmarkData(
-                options: .suitableForBookmarkFile,
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            )
-#endif
-            UserDefaults.standard.set(bookmarkData, forKey: bookmark)
-            selectedURL.stopAccessingSecurityScopedResource()
-            return true
-        } catch let error {
-            print(error.localizedDescription)
-            selectedURL.stopAccessingSecurityScopedResource()
-            return false
-        }
-    }
-}
-
-extension FolderBookmark {
 
     /// Get the sandbox bookmark
     /// - Parameter bookmark: The name of the bookmark
@@ -259,7 +230,40 @@ extension FolderBookmark {
     }
 }
 
+// MARK: Private functions
+
 private extension FolderBookmark {
+
+    /// Set the sandbox bookmark
+    /// - Parameters:
+    ///   - bookmark: The name of the bookmark
+    ///   - selectedURL: The URL of the bookmark
+    /// - Returns: True or false if the bookmark is set
+    static func setPersistentFileURL(_ bookmark: String, _ selectedURL: URL) -> Bool {
+        do {
+            _ = selectedURL.startAccessingSecurityScopedResource()
+#if os(macOS)
+            let bookmarkData = try selectedURL.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+#else
+            let bookmarkData = try selectedURL.bookmarkData(
+                options: .suitableForBookmarkFile,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+#endif
+            UserDefaults.standard.set(bookmarkData, forKey: bookmark)
+            selectedURL.stopAccessingSecurityScopedResource()
+            return true
+        } catch let error {
+            print(error.localizedDescription)
+            selectedURL.stopAccessingSecurityScopedResource()
+            return false
+        }
+    }
 
     /// Get the Documents directory
     /// - Returns: The users Documents directory

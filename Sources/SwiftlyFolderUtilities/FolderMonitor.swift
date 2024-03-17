@@ -1,6 +1,6 @@
 //
 //  FolderMonitor.swift
-//  Chord Provider
+//  SwiftlyFolderUtilities
 //
 //  © 2023 Nick Berendsen
 //
