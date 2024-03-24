@@ -163,7 +163,7 @@ extension FolderBookmark {
     /// - Parameters:
     ///   - bookmark: The name of the bookmark
     ///   - action: The action for the bookmark folder
-    public static func action(bookmark: String, action: (_ url: URL) async -> Void) async throws {
+    public static func action(bookmark: String, action: @Sendable (_ url: URL) async -> Void) async throws {
         guard let persistentURL = try FolderBookmark.getPersistentFileURL(bookmark) else {
             throw BookmarkError.notFound
         }
