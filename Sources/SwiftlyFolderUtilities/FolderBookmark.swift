@@ -163,7 +163,9 @@ extension FolderBookmark {
     /// - Parameters:
     ///   - bookmark: The name of the bookmark
     ///   - action: The action for the bookmark folder
-    public static func action(bookmark: String, action: @Sendable (_ url: URL) async -> Void) async throws {
+    ///
+    /// - Note: When the action is running in a Task, the task itself is responsible for the start and stop of the `SecurityScopedResource`
+    public static func action(bookmark: String, action: (_ url: URL) -> Void) throws {
         guard let persistentURL = try FolderBookmark.getPersistentFileURL(bookmark) else {
             throw BookmarkError.notFound
         }
@@ -174,7 +176,7 @@ extension FolderBookmark {
         /// Start accessing a security-scoped resource
         _ = persistentURL.startAccessingSecurityScopedResource()
         /// Execute the action
-        await action(persistentURL)
+        action(persistentURL)
     }
 
     /// Get the last selected URL of a bookmark, if any

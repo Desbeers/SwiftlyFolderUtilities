@@ -139,11 +139,11 @@ private extension FolderMonitor {
 
         /// Submit a debounce `Task`
         /// - Parameter operation: The `Task`
-        func submit(operation: @escaping () async -> Void) {
+        func submit(operation: @escaping () -> Void) {
             task?.cancel()
             task = Task {
                 try await sleep()
-                await operation()
+                operation()
                 task = nil
             }
         }
