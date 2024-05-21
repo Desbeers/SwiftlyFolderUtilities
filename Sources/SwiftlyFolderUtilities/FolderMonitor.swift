@@ -8,7 +8,7 @@
 import Foundation
 
 /// A class to monitor folders  for changes
-public class FolderMonitor {
+public final class FolderMonitor: @unchecked Sendable {
     /// The method when a folder did change
     public var folderDidChange: (() -> Void)?
     /// The kernel event queue ID
@@ -100,7 +100,7 @@ public class FolderMonitor {
         while keepWatcherThreadRunning {
             if kevent(kqueueID, nil, 0, &event, 1, &timeout) > 0 && event.filter == EVFILT_VNODE && event.fflags > 0 {
                 Task {
-                    await folderChangeDebouncer.submit {
+                    await self.folderChangeDebouncer.submit {
                         self.folderDidChange?()
                     }
                 }
@@ -125,7 +125,7 @@ public class FolderMonitor {
 private extension FolderMonitor {
 
     /// Debounce a task
-    actor DebounceTask {
+    actor DebounceTask: Sendable {
         /// The duration of the debounce
         private let duration: TimeInterval
         /// The `Task` to debounce
@@ -139,7 +139,7 @@ private extension FolderMonitor {
 
         /// Submit a debounce `Task`
         /// - Parameter operation: The `Task`
-        func submit(operation: @escaping () -> Void) {
+        func submit(operation: @Sendable @escaping () -> Void) {
             task?.cancel()
             task = Task {
                 try await sleep()
