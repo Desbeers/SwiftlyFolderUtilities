@@ -211,7 +211,6 @@ extension FolderBookmark {
 #if os(macOS)
             let urlForBookmark = try URL(
                 resolvingBookmarkData: bookmarkData,
-                options: .withSecurityScope,
                 relativeTo: nil,
                 bookmarkDataIsStale: &bookmarkDataIsStale
             )
@@ -246,7 +245,6 @@ private extension FolderBookmark {
             _ = selectedURL.startAccessingSecurityScopedResource()
 #if os(macOS)
             let bookmarkData = try selectedURL.bookmarkData(
-                options: .withSecurityScope,
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
